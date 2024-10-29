@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Battery Discharge Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+            display: flex;
+        }
+        #form-container {
+            flex: 1;
+        }
+        #chart-container {
+            flex: 1;
+            margin-left: 50px;
+        }
+        label, select, input {
+            display: block;
+            margin: 15px 0;
+        }
+        button {
+            padding: 10px 20px;
+        }
+        #result {
+            font-weight: bold;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+<div id="form-container">
+    <h1>Battery Discharge Calculator</h1>
+    <form id="calcForm">
+        <label for="battery_type">Battery Type:</label>
+        <select id="battery_type" name="battery_type">
+            <option value="alkaline">Alkaline</option>
+            <option value="nimh">NiMH</option>
+            <option value="nicd">NiCd</option>
+            <option value="lithium-ion">Lithium-ion</option>
+        </select>
+
+        <label for="battery_size">Battery Size:</label>
+        <select id="battery_size" name="battery_size">
+            <option value="aa">AA</option>
+            <option value="aaa">AAA</option>
+        </select>
+
+        <label for="load_current">Load Current (mA):</label>
+        <input type="number" id="load_current" name="load_current" step="0.1" min="0" required />
+
+        <button type="submit">Calculate</button>
+    </form>
+
+    <div id="result"></div>
+</div>
+
+<div id="chart-container">
+    <canvas id="dischargeChart" width="400" height="400"></canvas>
+</div>
+
+<!-- Include Chart.js from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    const form = document.getElementById('calcForm');
+    const resultDiv = document.getElementById('result');
+    const ctx = document.getElementById('dischargeChart').getContext('2d');
+    let dischargeChart;
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        const batteryType = document.getElementById('battery_type').value;
+        const batterySize = document.getElementById('battery_size').value;
+        const loadCurrent = document.getElementById('load_current').value;
+
+        fetch(`/calculate?battery_type=${encodeURIComponent(batteryType)}&battery_size=${encodeURIComponent(batterySize)}&load_current=${encodeURIComponent(loadCurrent)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Invalid input.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                resultDiv.innerText =
+                    `Estimated runtime: ${data.runtime_hours.toFixed(2)} hours`;
+                // Fetch and draw discharge curve
+                drawDischargeCurve(batteryType, batterySize, loadCurrent);
+            })
+            .catch(error => {
+                resultDiv.innerText = error.message;
+                console.error('Error:', error);
+            });
+    });
+
+    function drawDischargeCurve(batteryType, batterySize, loadCurrent) {
+        fetch(`/discharge_curve?battery_type=${encodeURIComponent(batteryType)}&battery_size=${encodeURIComponent(batterySize)}&load_current=${encodeURIComponent(loadCurrent)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Error fetching discharge curve.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                const labels = data.map(point => point.time.toFixed(2));
+                const voltages = data.map(point => point.voltage.toFixed(2));
+
+                if (dischargeChart) {
+                    dischargeChart.destroy();
+                }
+
+                dischargeChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Voltage (V) over Time (h)',
+                            data: voltages,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            fill: false,
+                            tension: 0.1,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: true,
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                            },
+                        },
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Time (hours)'
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Voltage (V)'
+                                },
+                                min: 0,
+                            }
+                        }
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+</script>
+</body>
+</html>
